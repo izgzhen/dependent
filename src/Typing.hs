@@ -69,11 +69,12 @@ tyck t@(TmApp t1 t2) = do       -- (TA-APP)
 
 -- kind equivalence
 kindEquiv :: Kind -> Kind -> Check ()
-kindEquiv KProper KProper = return ()       -- (QKA-STAR)
-kindEquiv (KPi x1 t1 k1) (KPi x2 t2 k2)     -- (QKA-PI)
-    | x1 == x2 = do
-        t1 `typeEquiv` t2
-        withValType x1 t1 $ k1 `kindEquiv` k2
+kindEquiv KProper KProper = return ()        -- (QKA-STAR)
+kindEquiv (KPi x1 t1 k1) (KPi x2 t2 k2) = do -- (QKA-PI)
+    t1 `typeEquiv` t2
+    withValType x1 t1 $
+        withValType x2 t2 $
+            k1 `kindEquiv` k2
 
 kindEquiv k1 k2 = throwError $ show k1 ++ " is not kind equivalent to " ++ show k2
 
@@ -96,9 +97,12 @@ typeEquiv ty1 ty2 = throwError $ show ty1 ++ " is not type equivalent to " ++ sh
 termEquiv :: Term -> Term -> Check ()
 termEquiv (TmInt i) (TmInt i') | i == i' = return ()
 termEquiv (TmVar x) (TmVar x') | x == x' = return ()    -- (QA-VAR)
-termEquiv (TmAbs x1 s1 tm1) (TmAbs x2 s2 tm2)           -- (QA-ABS)
-    | x1 == x2 && s1 == s2 =
-        withValType x1 s1 $ tm1 `termEquiv` tm2
+termEquiv (TmAbs x1 s1 tm1) (TmAbs x2 s2 tm2) = do      -- (QA-ABS)
+    s1 `typeEquiv` s2
+    withValType x1 s1 $
+        withValType x2 s2 $
+            tm1 `termEquiv` substTm x2 (TmVar x1) tm2
+
 termEquiv (TmApp s1 t1) (TmApp s2 t2) = do              -- (QA-APP)
     s1 `termEquiv` s2
     t1 `termEquiv` t2
