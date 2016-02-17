@@ -5,8 +5,11 @@ module Example where
 import AST
 import Typing
 
+import Prelude hiding (succ)
 import Control.Lens
 import qualified Data.Map as M
+
+-- Dependent type programming with Lambda LF
 
 env1 :: Env
 env1 = kindOf %~ (M.insert "Vector" (KPrf "x" TyInt KProp)) $ initState
@@ -18,3 +21,53 @@ tm2 :: Term
 tm2 = TmAbs "x" (TyApp (TyVar "Vector") (TmInt 2)) $
         TmAbs "f" (TyPi "y" (TyApp (TyVar "Vector") (TmInt 2)) TyInt)
                   (TmApp (TmVar "f") (TmVar "x"))
+
+-- Calculus of Construction
+
+nat :: Term
+nat = TmAll "a" TyProp $ -- ∀a:Prop.
+        TmAll "z" (TyPrf (TmVar "a")) $ -- ∀z:Prf a.
+            TmAll "s" (TyPi "x" (TyPrf (TmVar "a")) (TyPrf (TmVar "a"))) -- ∀s:Prf a -> Prf a.
+                (TmVar "a") -- a
+
+zero :: Term
+zero = TmAbs "a" TyProp $ -- ∀a:Prop.
+        TmAbs "z" (TyPrf (TmVar "a")) $ -- ∀z:Prf a.
+            TmAbs "s" (TyPi "x" (TyPrf (TmVar "a")) (TyPrf (TmVar "a"))) -- ∀s:Prf a -> Prf a.
+                (TmVar "z") -- z : Prf nat
+
+succ :: Term
+succ = TmAbs "n" (TyPrf (TmVar "nat")) $
+        TmAbs "a" TyProp $
+            TmAbs "z" (TyPrf (TmVar "a")) $
+                TmAbs "s" (TyPi "x" (TyPrf (TmVar "a")) (TyPrf (TmVar "a"))) $
+                    TmApp (TmVar "s") $
+                        (TmApp
+                            (TmApp
+                                (TmApp
+                                    (TmVar "n")
+                                    (TmVar "a"))
+                                (TmVar "z"))
+                            (TmVar "s"))
+
+add :: Term
+add = TmAbs "m" (TyVar "Nat") $
+        TmAbs "n" (TyVar "Nat") $
+            TmApp
+                (TmApp
+                    (TmApp
+                        (TmVar "m")
+                        (TmVar "nat"))
+                    (TmVar "n"))
+                (TmVar "succ")
+
+-- exists = λf:A→Prop.all c:Prop.all m:(Πx:Prop.Prf (f x)→Prf c).c
+exists :: Term
+exists = TmAbs "f" (TyPi "x" (TyVar "A") TyProp) $
+            TmAll "c" TyProp $
+                TmAll "m" (TyPi "x" TyProp
+                                    (TyPi "x0" (TyPrf (TmApp
+                                                        (TmVar "f")
+                                                        (TmVar "x")))
+                                               (TyPrf (TmVar "c"))))
+                          (TmVar "c")
