@@ -65,7 +65,7 @@ add = TmAbs "m" (TyVar "Nat") $
 exists :: Term
 exists = TmAbs "f" (TyPi "x" (TyVar "A") TyProp) $
             TmAll "c" TyProp $
-                TmAll "m" (TyPi "x" TyProp
+                TmAll "m" (TyPi "x" (TyVar "A")
                                     (TyPi "x0" (TyPrf (TmApp
                                                         (TmVar "f")
                                                         (TmVar "x")))

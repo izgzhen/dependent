@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, LambdaCase #-}
 
 module Typing where
 
@@ -49,6 +49,13 @@ kind ty@(TyApp s t) = do        --- (KA-APP)
         KPrf x ty1 k -> ty1 `typeEquiv` ty2 >> return (substKind x t k)
         _ -> throwError $ "can't kind " ++ show ty
 
+kind TyProp     = return KProp -- (KA-PROP)
+
+kind ty@(TyPrf tm) = -- (KA-PRF)
+    tyck tm >>= \case
+        TyProp -> return KProp
+        _      -> throwError $ "can't kind " ++ show ty
+
 -- Typing
 tyck :: Term -> Check Type
 tyck (TmInt _) = return TyInt
@@ -63,6 +70,13 @@ tyck t@(TmApp t1 t2) = do       -- (TA-APP)
     ty2 <- tyck t2
     case ty1 of
         TyPi x s1 ty -> s1 `typeEquiv` ty2 >> return (substTy x t2 ty)
+        _ -> throwError $ "can't type check " ++ show t
+
+tyck t@(TmAll x ty tm) = do -- (QT-ALL-E)
+    kty <- kind ty
+    tytm <- withValType x ty $ tyck tm
+    case (kty, tytm) of
+        (KProp, TyProp) -> return TyProp
         _ -> throwError $ "can't type check " ++ show t
 
 -- Equivalence Checking
@@ -91,12 +105,25 @@ typeEquiv (TyApp s1 tm1) (TyApp s2 tm2) = do            -- (QTA-APP)
     s1 `typeEquiv` s2
     tm1 `termEquiv` tm2
 
+typeEquiv (TyPi x s1 s2) (TyPrf tm) = do -- (QKA-PI-PRF)
+    tm' <- toWH tm
+    case tm' of
+        TmAll x' ty1 tm2 | x' == x -> do
+            s1 `typeEquiv` ty1
+            withValType x s1 $ s2 `typeEquiv` TyPrf tm2
+        _ -> throwError $ "tm can't be reduced to TmAll"
+
+typeEquiv t1@(TyPrf _) t2@(TyPi _ _ _) = typeEquiv t2 t1 -- (QKA-PRF-PI)
+
+typeEquiv (TyPrf tm) (TyPrf tm') = termEquiv tm tm' -- (QKA-PRF)
+
 typeEquiv ty1 ty2 = throwError $ show ty1 ++ " is not type equivalent to " ++ show ty2
 
 -- term equivalence
 termEquiv :: Term -> Term -> Check ()
 termEquiv (TmInt i) (TmInt i') | i == i' = return ()
 termEquiv (TmVar x) (TmVar x') | x == x' = return ()    -- (QA-VAR)
+
 termEquiv (TmAbs x1 s1 tm1) (TmAbs x2 s2 tm2) = do      -- (QA-ABS)
     s1 `typeEquiv` s2
     withValType x1 s1 $
@@ -106,12 +133,18 @@ termEquiv (TmAbs x1 s1 tm1) (TmAbs x2 s2 tm2) = do      -- (QA-ABS)
 termEquiv (TmApp s1 t1) (TmApp s2 t2) = do              -- (QA-APP)
     s1 `termEquiv` s2
     t1 `termEquiv` t2
+
 termEquiv tm1 (TmAbs x s tm) =                          -- (QA-NABS1)
     withValType x s $ TmApp tm1 (TmVar x) `termEquiv` tm
+
 termEquiv (TmAbs x s tm) tm1 =                          -- (QA-NABS2)
     withValType x s $ TmApp tm1 (TmVar x) `termEquiv` tm
-termEquiv tm1 tm2 = throwError $ show tm1 ++ " is not term equivalent to " ++ show tm2
 
+termEquiv (TmAll x ty tm) (TmAll x' ty' tm') | x == x' = do -- (QA-ALL-E)
+    ty `typeEquiv` ty'
+    withValType x ty $ tm `termEquiv` tm'
+
+termEquiv tm1 tm2 = throwError $ show tm1 ++ " is not term equivalent to " ++ show tm2
 
 -- Utilities
 
@@ -162,3 +195,4 @@ substTm x tm t@(TmAbs x' ty' tm')
 substTm x tm (TmApp t1 t2) = TmApp (substTm x tm t1) (substTm x tm t2)
 
 
+toWH = undefined
