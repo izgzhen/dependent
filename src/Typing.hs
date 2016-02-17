@@ -35,23 +35,23 @@ runKind ty = evalState (runExceptT (kind ty))
 
 kind :: Type -> Check Kind
 kind TyInt = return KProp
-kind (TyVar x) = lookupKind x   -- (KA-VAR)
-kind ty@(TyPi x ty1 ty2) = do   -- (KA-PI)
+kind (TyVar x) = lookupKind x                               -- (KA-VAR)
+kind ty@(TyPi x ty1 ty2) = do                               -- (KA-PI)
     k1 <- kind ty1
     k2 <- withValType x ty1 $ kind ty2
     case (k1, k2) of
         (KProp, KProp) -> return KProp
         _ -> throwError $ "can't kind " ++ show ty
-kind ty@(TyApp s t) = do        --- (KA-APP)
+kind ty@(TyApp s t) = do                                    -- (KA-APP)
     ks  <- kind s
     ty2 <- tyck t
     case ks of
         KPrf x ty1 k -> ty1 `typeEquiv` ty2 >> return (substKind x t k)
         _ -> throwError $ "can't kind " ++ show ty
 
-kind TyProp     = return KProp -- (KA-PROP)
+kind TyProp     = return KProp                              -- (KA-PROP)
 
-kind ty@(TyPrf tm) = -- (KA-PRF)
+kind ty@(TyPrf tm) =                                        -- (KA-PRF)
     tyck tm >>= \case
         TyProp -> return KProp
         _      -> throwError $ "can't kind " ++ show ty
@@ -59,20 +59,20 @@ kind ty@(TyPrf tm) = -- (KA-PRF)
 -- Typing
 tyck :: Term -> Check Type
 tyck (TmInt _) = return TyInt
-tyck (TmVar x) = lookupType x   -- (TA-VAR)
-tyck tm@(TmAbs x s t) = do       -- (TA-ABS)
+tyck (TmVar x) = lookupType x                               -- (TA-VAR)
+tyck tm@(TmAbs x s t) = do                                  -- (TA-ABS)
     ks <- kind s
     case ks of
         KProp -> TyPi x s <$> withValType x s (tyck t)
         _ -> throwError $ "can't type check " ++ show tm
-tyck t@(TmApp t1 t2) = do       -- (TA-APP)
+tyck t@(TmApp t1 t2) = do                                   -- (TA-APP)
     ty1 <- tyck t1
     ty2 <- tyck t2
     case ty1 of
         TyPi x s1 ty -> s1 `typeEquiv` ty2 >> return (substTy x t2 ty)
         _ -> throwError $ "can't type check " ++ show t
 
-tyck t@(TmAll x ty tm) = do -- (QT-ALL-E)
+tyck t@(TmAll x ty tm) = do                                 -- (QT-ALL-E)
     kty <- kind ty
     tytm <- withValType x ty $ tyck tm
     case (kty, tytm) of
@@ -83,8 +83,8 @@ tyck t@(TmAll x ty tm) = do -- (QT-ALL-E)
 
 -- kind equivalence
 kindEquiv :: Kind -> Kind -> Check ()
-kindEquiv KProp KProp = return ()        -- (QKA-STAR)
-kindEquiv (KPrf x1 t1 k1) (KPrf x2 t2 k2) = do -- (QKA-PI)
+kindEquiv KProp KProp = return ()                           -- (QKA-STAR)
+kindEquiv (KPrf x1 t1 k1) (KPrf x2 t2 k2) = do              -- (QKA-PI)
     t1 `typeEquiv` t2
     withValType x1 t1 $
         withValType x2 t2 $
@@ -95,49 +95,49 @@ kindEquiv k1 k2 = throwError $ show k1 ++ " is not kind equivalent to " ++ show 
 -- type equivalence
 typeEquiv :: Type -> Type -> Check ()
 typeEquiv TyInt TyInt = return ()
-typeEquiv (TyVar x) (TyVar x') | x == x' = return ()     -- (QTA-VAR)
-typeEquiv (TyPi x s1 s2) (TyPi x' t1 t2) = do            -- (QTA-PI)
+typeEquiv (TyVar x) (TyVar x') | x == x' = return ()        -- (QTA-VAR)
+typeEquiv (TyPi x s1 s2) (TyPi x' t1 t2) = do               -- (QTA-PI)
     s1 `typeEquiv` t1
     withValType x t1 $
         withValType x' t2 $
             s2 `typeEquiv` t2
-typeEquiv (TyApp s1 tm1) (TyApp s2 tm2) = do            -- (QTA-APP)
+typeEquiv (TyApp s1 tm1) (TyApp s2 tm2) = do                -- (QTA-APP)
     s1 `typeEquiv` s2
     tm1 `termEquiv` tm2
 
-typeEquiv (TyPi x s1 s2) (TyPrf tm) = do -- (QKA-PI-PRF)
-    tm' <- toWH tm
+typeEquiv (TyPi x s1 s2) (TyPrf tm) = do                    -- (QKA-PI-PRF)
+    let tm' = toWH tm
     case tm' of
         TmAll x' ty1 tm2 | x' == x -> do
             s1 `typeEquiv` ty1
             withValType x s1 $ s2 `typeEquiv` TyPrf tm2
         _ -> throwError $ "tm can't be reduced to TmAll"
 
-typeEquiv t1@(TyPrf _) t2@(TyPi _ _ _) = typeEquiv t2 t1 -- (QKA-PRF-PI)
+typeEquiv t1@(TyPrf _) t2@(TyPi _ _ _) = typeEquiv t2 t1    -- (QKA-PRF-PI)
 
-typeEquiv (TyPrf tm) (TyPrf tm') = termEquiv tm tm' -- (QKA-PRF)
+typeEquiv (TyPrf tm) (TyPrf tm') = termEquiv tm tm'         -- (QKA-PRF)
 
 typeEquiv ty1 ty2 = throwError $ show ty1 ++ " is not type equivalent to " ++ show ty2
 
 -- term equivalence
 termEquiv :: Term -> Term -> Check ()
 termEquiv (TmInt i) (TmInt i') | i == i' = return ()
-termEquiv (TmVar x) (TmVar x') | x == x' = return ()    -- (QA-VAR)
+termEquiv (TmVar x) (TmVar x') | x == x' = return ()        -- (QA-VAR)
 
-termEquiv (TmAbs x1 s1 tm1) (TmAbs x2 s2 tm2) = do      -- (QA-ABS)
+termEquiv (TmAbs x1 s1 tm1) (TmAbs x2 s2 tm2) = do          -- (QA-ABS)
     s1 `typeEquiv` s2
     withValType x1 s1 $
         withValType x2 s2 $
             tm1 `termEquiv` substTm x2 (TmVar x1) tm2
 
-termEquiv (TmApp s1 t1) (TmApp s2 t2) = do              -- (QA-APP)
+termEquiv (TmApp s1 t1) (TmApp s2 t2) = do                  -- (QA-APP)
     s1 `termEquiv` s2
     t1 `termEquiv` t2
 
-termEquiv tm1 (TmAbs x s tm) =                          -- (QA-NABS1)
+termEquiv tm1 (TmAbs x s tm) =                              -- (QA-NABS1)
     withValType x s $ TmApp tm1 (TmVar x) `termEquiv` tm
 
-termEquiv (TmAbs x s tm) tm1 =                          -- (QA-NABS2)
+termEquiv (TmAbs x s tm) tm1 =                              -- (QA-NABS2)
     withValType x s $ TmApp tm1 (TmVar x) `termEquiv` tm
 
 termEquiv (TmAll x ty tm) (TmAll x' ty' tm') | x == x' = do -- (QA-ALL-E)
@@ -183,6 +183,8 @@ substTy x tm t@(TyPi x' ty' ty)
     | x == x'   = t
     | otherwise = TyPi x' (substTy x tm ty') (substTy x tm ty)
 substTy x tm (TyApp ty tm') = TyApp (substTy x tm ty) (substTm x tm tm')
+substTy _ _ TyProp = TyProp
+substTy x tm (TyPrf tm') = TyPrf (substTm x tm tm')
 
 substTm :: Name -> Term -> Term -> Term
 substTm _ _ (TmInt i) = TmInt i
@@ -193,6 +195,17 @@ substTm x tm t@(TmAbs x' ty' tm')
     | x == x'   = t
     | otherwise = TmAbs x (substTy x tm ty') (substTm x tm tm')
 substTm x tm (TmApp t1 t2) = TmApp (substTm x tm t1) (substTm x tm t2)
+substTm x tm t@(TmAll x' ty' tm')
+    | x == x'   = t
+    | otherwise = TmAll x (substTy x tm ty') (substTm x tm tm')
 
-
-toWH = undefined
+-- Reduce to weak head form
+toWH :: Term -> Term
+toWH tm = let tm' = toWH' tm
+          in  if tm' == tm
+                then tm
+                else toWH tm'
+    where
+        toWH' (TmApp (TmAbs x ty1 t1) t2) = substTm x t1 t2
+        toWH' (TmApp t1 t2) = TmApp (toWH t1) t2
+        toWH' t = t

@@ -71,3 +71,16 @@ exists = TmAbs "f" (TyPi "x" (TyVar "A") TyProp) $
                                                         (TmVar "x")))
                                                (TyPrf (TmVar "c"))))
                           (TmVar "c")
+
+exercise261 :: Term
+exercise261 = TmAbs "f" (TyPi "x" (TyVar "A") TyProp) $
+                TmAbs "a" (TyVar "A") $
+                    TmAbs "i" (TyPrf (TmApp (TmVar "f") (TmVar "a")))
+                              (TmAll "x" (TyVar "A")
+                                         (TmApp
+                                            (TmVar "f")
+                                            (TmVar "x")))
+
+
+
+

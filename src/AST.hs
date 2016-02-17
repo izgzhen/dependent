@@ -36,7 +36,7 @@ instance Show Type where
     show (TyPi x tyx ty) = "(Π" ++ x ++ ":" ++ show tyx ++ "." ++ show ty ++ ")"
     show (TyApp ty tm) = "(" ++ show ty ++ " " ++ show tm ++ ")"
     show TyProp = "Prop"
-    show (TyPrf tm) = "(Prf" ++ show tm ++ ")"
+    show (TyPrf tm) = "(Prf " ++ show tm ++ ")"
 
 instance Show Kind where
     show KProp = "*"
