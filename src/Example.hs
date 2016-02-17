@@ -9,7 +9,7 @@ import Control.Lens
 import qualified Data.Map as M
 
 env1 :: Env
-env1 = kindOf %~ (M.insert "Vector" (KPi "x" TyInt KProper)) $ initState
+env1 = kindOf %~ (M.insert "Vector" (KPrf "x" TyInt KProp)) $ initState
 
 tm1 :: Term
 tm1 = TmAbs "v" (TyPi "x" TyInt (TyApp (TyVar "Vector") (TmVar "x"))) (TmVar "v")

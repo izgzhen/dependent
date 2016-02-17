@@ -34,19 +34,19 @@ runKind ty = evalState (runExceptT (kind ty))
 -- Kinding
 
 kind :: Type -> Check Kind
-kind TyInt = return KProper
+kind TyInt = return KProp
 kind (TyVar x) = lookupKind x   -- (KA-VAR)
 kind ty@(TyPi x ty1 ty2) = do   -- (KA-PI)
     k1 <- kind ty1
     k2 <- withValType x ty1 $ kind ty2
     case (k1, k2) of
-        (KProper, KProper) -> return KProper
+        (KProp, KProp) -> return KProp
         _ -> throwError $ "can't kind " ++ show ty
 kind ty@(TyApp s t) = do        --- (KA-APP)
     ks  <- kind s
     ty2 <- tyck t
     case ks of
-        KPi x ty1 k -> ty1 `typeEquiv` ty2 >> return (substKind x t k)
+        KPrf x ty1 k -> ty1 `typeEquiv` ty2 >> return (substKind x t k)
         _ -> throwError $ "can't kind " ++ show ty
 
 -- Typing
@@ -56,7 +56,7 @@ tyck (TmVar x) = lookupType x   -- (TA-VAR)
 tyck tm@(TmAbs x s t) = do       -- (TA-ABS)
     ks <- kind s
     case ks of
-        KProper -> TyPi x s <$> withValType x s (tyck t)
+        KProp -> TyPi x s <$> withValType x s (tyck t)
         _ -> throwError $ "can't type check " ++ show tm
 tyck t@(TmApp t1 t2) = do       -- (TA-APP)
     ty1 <- tyck t1
@@ -69,8 +69,8 @@ tyck t@(TmApp t1 t2) = do       -- (TA-APP)
 
 -- kind equivalence
 kindEquiv :: Kind -> Kind -> Check ()
-kindEquiv KProper KProper = return ()        -- (QKA-STAR)
-kindEquiv (KPi x1 t1 k1) (KPi x2 t2 k2) = do -- (QKA-PI)
+kindEquiv KProp KProp = return ()        -- (QKA-STAR)
+kindEquiv (KPrf x1 t1 k1) (KPrf x2 t2 k2) = do -- (QKA-PI)
     t1 `typeEquiv` t2
     withValType x1 t1 $
         withValType x2 t2 $
@@ -138,10 +138,10 @@ withValType x ty ck = do
     return a
 
 substKind :: Name -> Term -> Kind -> Kind
-substKind _ _ KProper = KProper
-substKind x tm kd@(KPi x' ty' innerKd)
+substKind _ _ KProp = KProp
+substKind x tm kd@(KPrf x' ty' innerKd)
     | x == x'   = kd
-    | otherwise = KPi x' (substTy x tm ty') (substKind x tm innerKd)
+    | otherwise = KPrf x' (substTy x tm ty') (substKind x tm innerKd)
 
 substTy :: Name -> Term -> Type -> Type
 substTy _ _ TyInt = TyInt
