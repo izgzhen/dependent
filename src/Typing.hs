@@ -10,13 +10,15 @@ import Control.Lens
 import AST
 
 data Env = Env {
-  _kindOf :: M.Map Name Kind
+  _termOf :: M.Map Name Term
+, _kindOf :: M.Map Name Kind
 , _typeOf :: M.Map Name Type
 }
 
 initState :: Env
 initState = Env {
-  _kindOf = M.empty
+  _termOf = M.empty
+, _kindOf = M.empty
 , _typeOf = M.empty
 }
 
@@ -24,24 +26,33 @@ makeLenses ''Env
 
 type Check = ExceptT String (State Env)
 
+runCheck :: Check a -> Env -> Either String a
+runCheck x = evalState (runExceptT x)
+
 runType :: Term -> Env -> Either String Type
-runType tm = evalState (runExceptT (tyck tm))
+runType tm = runCheck (tyck tm)
 
 runKind :: Type -> Env -> Either String Kind
-runKind ty = evalState (runExceptT (kind ty))
+runKind ty = runCheck (kind ty)
+
+runTypeEquiv :: Type -> Type -> Env -> Either String ()
+runTypeEquiv ty1 ty2 = runCheck (ty1 `typeEquiv` ty2)
 
 
 -- Kinding
 
 kind :: Type -> Check Kind
 kind TyInt = return KProp
+
 kind (TyVar x) = lookupKind x                               -- (KA-VAR)
+
 kind ty@(TyPi x ty1 ty2) = do                               -- (KA-PI)
     k1 <- kind ty1
     k2 <- withValType x ty1 $ kind ty2
     case (k1, k2) of
         (KProp, KProp) -> return KProp
         _ -> throwError $ "can't kind " ++ show ty
+
 kind ty@(TyApp s t) = do                                    -- (KA-APP)
     ks  <- kind s
     ty2 <- tyck t
@@ -59,12 +70,15 @@ kind ty@(TyPrf tm) =                                        -- (KA-PRF)
 -- Typing
 tyck :: Term -> Check Type
 tyck (TmInt _) = return TyInt
+
 tyck (TmVar x) = lookupType x                               -- (TA-VAR)
+
 tyck tm@(TmAbs x s t) = do                                  -- (TA-ABS)
     ks <- kind s
     case ks of
         KProp -> TyPi x s <$> withValType x s (tyck t)
         _ -> throwError $ "can't type check " ++ show tm
+
 tyck t@(TmApp t1 t2) = do                                   -- (TA-APP)
     ty1 <- tyck t1
     ty2 <- tyck t2
@@ -106,7 +120,7 @@ typeEquiv (TyApp s1 tm1) (TyApp s2 tm2) = do                -- (QTA-APP)
     tm1 `termEquiv` tm2
 
 typeEquiv (TyPi x s1 s2) (TyPrf tm) = do                    -- (QKA-PI-PRF)
-    let tm' = toWH tm
+    tm' <- toWH tm
     case tm' of
         TmAll x' ty1 tm2 | x' == x -> do
             s1 `typeEquiv` ty1
@@ -116,6 +130,8 @@ typeEquiv (TyPi x s1 s2) (TyPrf tm) = do                    -- (QKA-PI-PRF)
 typeEquiv t1@(TyPrf _) t2@(TyPi _ _ _) = typeEquiv t2 t1    -- (QKA-PRF-PI)
 
 typeEquiv (TyPrf tm) (TyPrf tm') = termEquiv tm tm'         -- (QKA-PRF)
+
+typeEquiv TyProp TyProp = return ()
 
 typeEquiv ty1 ty2 = throwError $ show ty1 ++ " is not type equivalent to " ++ show ty2
 
@@ -162,6 +178,9 @@ lookupKind x = do
         Just kd -> return kd
         Nothing -> throwError $ "Can't find variable's kind " ++ x
 
+lookupTerm :: Name -> Check (Maybe Term)
+lookupTerm x = M.lookup x <$> use termOf
+
 withValType :: Name -> Type -> Check a -> Check a
 withValType x ty ck = do
     old <- use typeOf
@@ -193,19 +212,25 @@ substTm x tm t@(TmVar x')
     | otherwise = t
 substTm x tm t@(TmAbs x' ty' tm')
     | x == x'   = t
-    | otherwise = TmAbs x (substTy x tm ty') (substTm x tm tm')
+    | otherwise = TmAbs x' (substTy x tm ty') (substTm x tm tm')
 substTm x tm (TmApp t1 t2) = TmApp (substTm x tm t1) (substTm x tm t2)
 substTm x tm t@(TmAll x' ty' tm')
     | x == x'   = t
-    | otherwise = TmAll x (substTy x tm ty') (substTm x tm tm')
+    | otherwise = TmAll x' (substTy x tm ty') (substTm x tm tm')
 
 -- Reduce to weak head form
-toWH :: Term -> Term
-toWH tm = let tm' = toWH' tm
-          in  if tm' == tm
-                then tm
-                else toWH tm'
-    where
-        toWH' (TmApp (TmAbs x ty1 t1) t2) = substTm x t1 t2
-        toWH' (TmApp t1 t2) = TmApp (toWH t1) t2
-        toWH' t = t
+toWH :: Term -> Check Term
+toWH tm = do
+    tm' <- toWH' tm
+    if tm' == tm
+        then return tm
+        else toWH tm'
+
+toWH' :: Term -> Check Term
+toWH' (TmApp (TmAbs x ty1 t1) t2) = return $ substTm x t2 t1
+toWH' (TmApp t1 t2) = TmApp <$> (toWH t1) <*> return t2
+toWH' (TmVar x) =
+    lookupTerm x >>= \case
+        Just tm -> toWH tm
+        Nothing -> return $ TmVar x
+toWH' t = return t

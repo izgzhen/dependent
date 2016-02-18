@@ -82,5 +82,37 @@ exercise261 = TmAbs "f" (TyPi "x" (TyVar "A") TyProp) $
                                             (TmVar "x")))
 
 
+-- Leibniz equality
+eq :: Term
+eq = TmAbs "a" TyProp $
+        TmAbs "x" (TyPrf (TmVar "a")) $
+            TmAbs "y" (TyPrf (TmVar "a")) $
+                TmAll "p" (TyPi "i" (TyPrf (TmVar "a")) TyProp) $
+                    TmAll "h" (TyPrf (TmApp (TmVar "p") (TmVar "x"))) $
+                        TmApp (TmVar "p") (TmVar "y")
 
+
+-- The term as proof of reflexivity
+eqRefl :: Term
+eqRefl = TmAbs "a" TyProp $
+            TmAbs "x" (TyPrf (TmVar "a")) $
+                TmAbs "p" (TyPi "i" (TyPrf (TmVar "a")) TyProp) $
+                    TmAbs "h" (TyPrf (TmApp (TmVar "p") (TmVar "x"))) $
+                        TmVar "h"
+
+eqReflTy :: Type
+eqReflTy = TyPi "a" TyProp $
+            TyPi "x" (TyPrf (TmVar "a")) $
+                TyPrf (TmApp
+                        (TmApp
+                            (TmApp
+                                (TmVar "eq")
+                                (TmVar "a"))
+                            (TmVar "x"))
+                        (TmVar "x"))
+ 
+proveReflex :: Either String ()
+proveReflex = flip runCheck initState { _termOf = M.singleton "eq" eq } $ do
+    eqReflTy' <- tyck eqRefl
+    eqReflTy' `typeEquiv` eqReflTy
 
