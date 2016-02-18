@@ -1,3 +1,5 @@
+{-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances #-}
+
 module AST where
 
 type Name = String
@@ -33,7 +35,10 @@ instance Show Term where
 instance Show Type where
     show TyInt = "Int"
     show (TyVar t) = t
-    show (TyPi x tyx ty) = "(Π" ++ x ++ ":" ++ show tyx ++ "." ++ show ty ++ ")"
+    show (TyPi x tyx ty) =
+        if x == noCap
+          then "(" ++ show tyx ++ " -> " ++ show ty ++ ")"
+          else "(Π" ++ x ++ ":" ++ show tyx ++ "." ++ show ty ++ ")"
     show (TyApp ty tm) = "(" ++ show ty ++ " " ++ show tm ++ ")"
     show TyProp = "Prop"
     show (TyPrf tm) = "(Prf " ++ show tm ++ ")"
@@ -45,4 +50,25 @@ instance Show Kind where
 
 
 -- Clipboard: ∀,∃,Π,λ
+
+(-->) :: Type -> Type -> Type
+(-->) ty1 ty2 = TyPi noCap ty1 ty2
+
+noCap :: Name
+noCap = "_"
+
+class AppShortCut a b where
+    app :: a -> b -> Term
+
+instance AppShortCut Name Name where
+    app x y = TmApp (TmVar x) (TmVar y)
+
+instance AppShortCut Term Name where
+    app x y = TmApp x (TmVar y)
+
+instance AppShortCut Name Term where
+    app x y = TmApp (TmVar x) y
+
+instance AppShortCut Term Term where
+    app = TmApp
 

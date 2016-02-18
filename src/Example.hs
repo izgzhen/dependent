@@ -24,52 +24,41 @@ tm2 = TmAbs "x" (TyApp (TyVar "Vector") (TmInt 2)) $
 
 -- Calculus of Construction
 
+-- natural number
+
 nat :: Term
 nat = TmAll "a" TyProp $ -- ∀a:Prop.
         TmAll "z" (TyPrf (TmVar "a")) $ -- ∀z:Prf a.
-            TmAll "s" (TyPi "x" (TyPrf (TmVar "a")) (TyPrf (TmVar "a"))) -- ∀s:Prf a -> Prf a.
+            TmAll "s" (TyPrf (TmVar "a") --> TyPrf (TmVar "a")) -- ∀s:Prf a -> Prf a.
                 (TmVar "a") -- a
 
 zero :: Term
 zero = TmAbs "a" TyProp $ -- ∀a:Prop.
         TmAbs "z" (TyPrf (TmVar "a")) $ -- ∀z:Prf a.
-            TmAbs "s" (TyPi "x" (TyPrf (TmVar "a")) (TyPrf (TmVar "a"))) -- ∀s:Prf a -> Prf a.
+            TmAbs "s" (TyPrf (TmVar "a") --> TyPrf (TmVar "a")) -- ∀s:Prf a -> Prf a.
                 (TmVar "z") -- z : Prf nat
 
 succ :: Term
 succ = TmAbs "n" (TyPrf (TmVar "nat")) $
         TmAbs "a" TyProp $
             TmAbs "z" (TyPrf (TmVar "a")) $
-                TmAbs "s" (TyPi "x" (TyPrf (TmVar "a")) (TyPrf (TmVar "a"))) $
+                TmAbs "s" (TyPrf (TmVar "a") --> TyPrf (TmVar "a")) $
                     TmApp (TmVar "s") $
-                        (TmApp
-                            (TmApp
-                                (TmApp
-                                    (TmVar "n")
-                                    (TmVar "a"))
-                                (TmVar "z"))
-                            (TmVar "s"))
+                        "n" `app` "a" `app` "z" `app` "s"
 
 add :: Term
 add = TmAbs "m" (TyVar "Nat") $
         TmAbs "n" (TyVar "Nat") $
-            TmApp
-                (TmApp
-                    (TmApp
-                        (TmVar "m")
-                        (TmVar "nat"))
-                    (TmVar "n"))
-                (TmVar "succ")
+            "m" `app` "nat" `app` "n" `app` "succ"
 
 -- exists = λf:A→Prop.all c:Prop.all m:(Πx:Prop.Prf (f x)→Prf c).c
 exists :: Term
-exists = TmAbs "f" (TyPi "x" (TyVar "A") TyProp) $
+exists = TmAbs "f" (TyVar "A" --> TyProp) $
             TmAll "c" TyProp $
                 TmAll "m" (TyPi "x" (TyVar "A")
-                                    (TyPi "x0" (TyPrf (TmApp
-                                                        (TmVar "f")
-                                                        (TmVar "x")))
-                                               (TyPrf (TmVar "c"))))
+                                    (TyPrf ("f" `app` "x")
+                                        -->
+                                     TyPrf (TmVar "c")))
                           (TmVar "c")
 
 exercise261 :: Term
@@ -77,9 +66,7 @@ exercise261 = TmAbs "f" (TyPi "x" (TyVar "A") TyProp) $
                 TmAbs "a" (TyVar "A") $
                     TmAbs "i" (TyPrf (TmApp (TmVar "f") (TmVar "a")))
                               (TmAll "x" (TyVar "A")
-                                         (TmApp
-                                            (TmVar "f")
-                                            (TmVar "x")))
+                                         ("f" `app` "x"))
 
 
 -- Leibniz equality
@@ -87,32 +74,49 @@ eq :: Term
 eq = TmAbs "a" TyProp $
         TmAbs "x" (TyPrf (TmVar "a")) $
             TmAbs "y" (TyPrf (TmVar "a")) $
-                TmAll "p" (TyPi "i" (TyPrf (TmVar "a")) TyProp) $
+                TmAll "p" (TyPrf (TmVar "a") --> TyProp) $
                     TmAll "h" (TyPrf (TmApp (TmVar "p") (TmVar "x"))) $
-                        TmApp (TmVar "p") (TmVar "y")
+                        "p" `app` "y"
 
 
 -- The term as proof of reflexivity
 eqRefl :: Term
 eqRefl = TmAbs "a" TyProp $
             TmAbs "x" (TyPrf (TmVar "a")) $
-                TmAbs "p" (TyPi "i" (TyPrf (TmVar "a")) TyProp) $
-                    TmAbs "h" (TyPrf (TmApp (TmVar "p") (TmVar "x"))) $
+                TmAbs "p" (TyPrf (TmVar "a") --> TyProp) $
+                    TmAbs "h" (TyPrf ("p" `app` "x")) $
                         TmVar "h"
 
 eqReflTy :: Type
 eqReflTy = TyPi "a" TyProp $
             TyPi "x" (TyPrf (TmVar "a")) $
-                TyPrf (TmApp
-                        (TmApp
-                            (TmApp
-                                (TmVar "eq")
-                                (TmVar "a"))
-                            (TmVar "x"))
-                        (TmVar "x"))
+                TyPrf ("eq" `app` "a" `app` "x" `app` "x")
  
 proveReflex :: Either String ()
 proveReflex = flip runCheck initState { _termOf = M.singleton "eq" eq } $ do
     eqReflTy' <- tyck eqRefl
     eqReflTy' `typeEquiv` eqReflTy
+
+-- induction over natural number
+
+natInd :: Type
+natInd = let ty1 = TyPi "p" (TyPrf (TmVar "nat") --> TyProp) $
+                        TyPrf ("p" `app` "zero")
+             ty2 = TyPi "x" (TyPrf (TmVar "nat")) $
+                        TyPrf ("p" `app` "x")
+             ty3 = TyPrf ("p" `app` ("succ" `app` "x"))
+         in  ty1 --> (ty2 --> ty3) --> ty2
+
+
+assoc :: Type
+assoc = TyPi "x" (TyPrf (TmVar "nat")) $
+            TyPi "y" (TyPrf (TmVar "nat")) $
+                TyPi "z" (TyPrf (TmVar "nat")) $
+                    TyPrf
+                        (TmApp
+                            (TmApp
+                                ("eq" `app` "nat")
+                                ("x" `app` ("y" `app` "z")))
+                            ("add" `app` ("add" `app` "x" `app` "y") `app` "z"))
+
 
