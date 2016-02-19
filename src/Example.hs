@@ -112,11 +112,9 @@ assoc :: Type
 assoc = TyPi "x" (TyPrf (TmVar "nat")) $
             TyPi "y" (TyPrf (TmVar "nat")) $
                 TyPi "z" (TyPrf (TmVar "nat")) $
-                    TyPrf
-                        (TmApp
-                            (TmApp
-                                ("eq" `app` "nat")
-                                ("x" `app` ("y" `app` "z")))
-                            ("add" `app` ("add" `app` "x" `app` "y") `app` "z"))
+                    TyPrf $
+                        "eq" `app` "nat" `app`
+                        ("add" `app` "x" `app` ("add" `app` "y" `app` "z")) `app`
+                        ("add" `app` ("add" `app` "x" `app` "y") `app` "z")
 
 
